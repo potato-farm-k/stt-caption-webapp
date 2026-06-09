@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>실시간 STT 자막</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Mac local speech-to-text</p>
+          <h1>실시간 자막</h1>
+        </div>
+        <p id="status" class="status" aria-live="polite">대기 중</p>
+      </header>
+
+      <section class="caption-panel" aria-label="현재 자막">
+        <p id="caption" class="caption" aria-live="polite">
+          시작 버튼을 누르고 말해보세요.
+        </p>
+      </section>
+
+      <section class="controls" aria-label="자막 제어">
+        <button id="startButton" type="button">시작</button>
+        <button id="stopButton" type="button" disabled>중지</button>
+      </section>
+
+      <section class="history-section" aria-labelledby="historyTitle">
+        <h2 id="historyTitle">최근 문장</h2>
+        <ul id="history" class="history">
+          <li class="empty">아직 인식된 문장이 없습니다.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
