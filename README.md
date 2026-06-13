@@ -57,6 +57,6 @@ http://localhost:8000
 
 ## 배포 기준 시각 갱신
 
-GitHub에 최종 push하기 직전에 `index.html` 하단의 `배포 기준 시각`과
+GitHub에 최종 push하기 직전에 `index.html` 상단의 `배포 기준 시각`과
 `datetime` 값을 한국 표준시(KST) 기준으로 갱신합니다. 클라이언트 화면의 시각이
 새 값으로 바뀌면 최신 배포가 반영된 것입니다.

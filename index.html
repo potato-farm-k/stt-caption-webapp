@@ -10,7 +10,13 @@
     <main class="app">
       <header class="app-header">
         <div>
-          <p class="eyebrow">Browser speech-to-text</p>
+          <div class="eyebrow-row">
+            <p class="eyebrow">Browser speech-to-text</p>
+            <p class="deployment-info" aria-label="배포 기준 시각">
+              <span aria-hidden="true">✦</span>
+              <time datetime="2026-06-13T14:49:00+09:00">2026-06-13 14:49 KST</time>
+            </p>
+          </div>
           <h1>실시간 자막</h1>
         </div>
         <p id="status" class="status" aria-live="polite">대기 중</p>
@@ -66,11 +72,6 @@
           <li class="empty">아직 인식된 문장이 없습니다.</li>
         </ul>
       </section>
-
-      <footer class="deployment-info" aria-label="배포 정보">
-        <span>배포 기준 시각</span>
-        <time datetime="2026-06-13T14:47:00+09:00">2026-06-13 14:47 KST</time>
-      </footer>
     </main>
 
     <script src="script.js"></script>

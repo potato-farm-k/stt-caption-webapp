@@ -40,8 +40,16 @@ body {
   gap: 24px;
 }
 
+.eyebrow-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--accent);
   font-size: 16px;
   font-weight: 700;
@@ -243,18 +251,17 @@ h2 {
 
 .deployment-info {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #202020;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
   color: #888888;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
-.deployment-info span::after {
-  content: "·";
-  margin-left: 8px;
+.deployment-info span {
+  color: var(--accent);
+  font-size: 14px;
 }
 
 @media (max-width: 720px) {
@@ -285,11 +292,6 @@ h2 {
 
   .diagnostics-grid {
     grid-template-columns: 1fr;
-  }
-
-  .deployment-info {
-    justify-content: flex-start;
-    flex-wrap: wrap;
   }
 
   button {
