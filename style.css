@@ -28,9 +28,9 @@ body {
 .app {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   min-height: 100vh;
-  padding: 32px;
+  padding: 12px 32px 24px;
 }
 
 .app-header {
@@ -40,18 +40,18 @@ body {
   gap: 24px;
 }
 
-.eyebrow-row {
+.top-meta {
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-bottom: 8px;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .eyebrow {
   margin: 0;
   color: var(--accent);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -252,25 +252,40 @@ h2 {
 .deployment-info {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  min-width: 0;
   margin: 0;
   color: #888888;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
+  white-space: nowrap;
 }
 
 .deployment-info span {
   color: var(--accent);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 @media (max-width: 720px) {
   .app {
-    padding: 20px;
+    padding: 8px 20px 20px;
   }
 
   .app-header {
-    flex-direction: column;
+    align-items: center;
+  }
+
+  .top-meta {
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+  }
+
+  .deployment-info {
+    font-size: 10px;
   }
 
   h1 {
