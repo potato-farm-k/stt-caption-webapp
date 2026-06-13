@@ -192,6 +192,11 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.diagnostic-detail.warning {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .diagnostic-note {
   margin-top: 12px;
   font-size: 14px;

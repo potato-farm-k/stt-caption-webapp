@@ -4,6 +4,8 @@ const SpeechRecognition =
 const RESTART_BASE_DELAY = 700;
 const RESTART_MAX_DELAY = 8000;
 const MAX_CONSECUTIVE_RESTARTS = 7;
+const DEVICE_CHANGE_SETTLE_DELAY = 1400;
+const INPUT_SILENCE_WARNING_DELAY = 4000;
 const NON_RETRYABLE_ERRORS = new Set([
   "not-allowed",
   "service-not-allowed",
@@ -47,6 +49,10 @@ let consecutiveRestarts = 0;
 let totalRestarts = 0;
 let lastRecognitionError = null;
 let abortedForVisibility = false;
+let abortedForDeviceChange = false;
+let deviceChangeInProgress = false;
+let deviceChangeTimer = null;
+let deviceChangeGeneration = 0;
 
 let microphoneStream = null;
 let microphoneMonitorPromise = null;
@@ -55,6 +61,9 @@ let analyser = null;
 let levelAnimationFrame = null;
 let microphoneMonitorGeneration = 0;
 let microphoneMonitorDisabled = false;
+let monitorStartedAt = 0;
+let lastInputSignalAt = 0;
+let activeInputDetails = "";
 
 function setStatus(text, type = "idle") {
   statusLabel.textContent = text;
@@ -119,10 +128,18 @@ function clearRestartTimer() {
   }
 }
 
+function clearDeviceChangeTimer() {
+  if (deviceChangeTimer !== null) {
+    window.clearTimeout(deviceChangeTimer);
+    deviceChangeTimer = null;
+  }
+}
+
 function scheduleRestart(reason, requestedDelay) {
   if (
     !shouldListen ||
     document.hidden ||
+    deviceChangeInProgress ||
     restartTimer !== null ||
     recognitionActive ||
     recognitionStarting
@@ -164,6 +181,7 @@ function startRecognition() {
   if (
     !shouldListen ||
     document.hidden ||
+    deviceChangeInProgress ||
     recognitionActive ||
     recognitionStarting
   ) {
@@ -175,7 +193,17 @@ function startRecognition() {
   restartInfo.textContent = "음성 인식 서비스에 연결 중";
 
   try {
-    recognition.start();
+    const inputTrack = microphoneStream?.getAudioTracks()[0];
+
+    if (inputTrack?.readyState === "live") {
+      try {
+        recognition.start(inputTrack);
+      } catch {
+        recognition.start();
+      }
+    } else {
+      recognition.start();
+    }
   } catch (error) {
     recognitionStarting = false;
     recordError("aborted", error.message);
@@ -202,6 +230,12 @@ function handleRecognitionError(event) {
   if (event.error === "aborted" && abortedForVisibility) {
     abortedForVisibility = false;
     restartInfo.textContent = "화면이 다시 표시되면 자동으로 재연결합니다.";
+    return;
+  }
+
+  if (event.error === "aborted" && abortedForDeviceChange) {
+    abortedForDeviceChange = false;
+    restartInfo.textContent = "변경된 마이크 입력을 다시 연결하는 중입니다.";
     return;
   }
 
@@ -246,6 +280,7 @@ function createRecognition() {
     recognitionStarting = false;
     recognitionActive = true;
     abortedForVisibility = false;
+    abortedForDeviceChange = false;
     lastRecognitionError = null;
     setStatus("듣는 중", "listening");
     setControls(true);
@@ -288,6 +323,10 @@ function createRecognition() {
   instance.addEventListener("end", () => {
     recognitionStarting = false;
     recognitionActive = false;
+
+    if (deviceChangeInProgress) {
+      return;
+    }
 
     if (shouldListen) {
       if (document.hidden) {
@@ -354,7 +393,8 @@ async function refreshMicrophoneDevices() {
         ? `외부 마이크 후보 ${externalCount}개 감지`
         : "외부 마이크 후보를 확인하지 못함";
 
-    microphoneNote.textContent = `${connectionSummary} · 입력 장치 ${inputs.length}개 · 실제 음성 인식 입력은 시스템 기본 장치를 따릅니다.`;
+    const inputDetails = activeInputDetails ? ` · ${activeInputDetails}` : "";
+    microphoneNote.textContent = `${connectionSummary} · 입력 장치 ${inputs.length}개${inputDetails} · 지원되는 브라우저에서는 확인된 입력을 음성 인식에도 사용합니다.`;
   } catch (error) {
     microphoneNote.textContent = `마이크 목록 확인 실패: ${error.message}`;
   }
@@ -377,11 +417,27 @@ function updateInputLevel() {
 
   const rms = Math.sqrt(sumSquares / samples.length);
   const level = Math.min(100, Math.max(0, Math.round((rms - 0.008) * 500)));
+  const now = Date.now();
 
   levelFill.style.width = `${level}%`;
   levelMeter.setAttribute("aria-valuenow", String(level));
-  levelText.textContent =
-    level > 2 ? `입력 레벨: ${level}%` : "입력 레벨: 매우 낮음";
+
+  if (level > 2) {
+    lastInputSignalAt = now;
+    levelText.textContent = `입력 신호 감지됨 · 레벨 ${level}%`;
+    levelText.classList.remove("warning");
+  } else if (
+    now - monitorStartedAt >= INPUT_SILENCE_WARNING_DELAY &&
+    (!lastInputSignalAt ||
+      now - lastInputSignalAt >= INPUT_SILENCE_WARNING_DELAY)
+  ) {
+    levelText.textContent =
+      "입력 신호 없음 · 마이크 음소거, 게인, 전원 또는 어댑터를 확인하세요.";
+    levelText.classList.add("warning");
+  } else {
+    levelText.textContent = "입력 신호 확인 중...";
+    levelText.classList.remove("warning");
+  }
 
   levelAnimationFrame = window.requestAnimationFrame(updateInputLevel);
 }
@@ -406,9 +462,12 @@ function stopMicrophoneMonitor() {
 
   analyser = null;
   microphoneMonitorPromise = null;
+  monitorStartedAt = 0;
+  lastInputSignalAt = 0;
   levelFill.style.width = "0";
   levelMeter.setAttribute("aria-valuenow", "0");
   levelText.textContent = "입력 레벨: 대기 중";
+  levelText.classList.remove("warning");
 }
 
 async function startMicrophoneMonitor() {
@@ -451,12 +510,35 @@ async function startMicrophoneMonitor() {
       microphoneStream = stream;
       const track = stream.getAudioTracks()[0];
       const label = track?.label || "시스템 기본 마이크";
+      const settings = track?.getSettings?.() || {};
+      const inputDetails = [
+        settings.channelCount ? `${settings.channelCount}채널` : "",
+        settings.sampleRate ? `${settings.sampleRate}Hz` : "",
+      ].filter(Boolean);
 
       microphoneName.textContent = label;
       microphoneType.textContent = classifyMicrophone(label);
+      activeInputDetails = inputDetails.join(" · ");
+      monitorStartedAt = Date.now();
+      lastInputSignalAt = 0;
+      levelText.textContent = "입력 신호 확인 중...";
+      levelText.classList.remove("warning");
       await refreshMicrophoneDevices();
 
       if (track) {
+        track.addEventListener("mute", () => {
+          levelText.textContent =
+            "마이크 입력이 음소거 상태입니다. 연결과 권한을 확인하세요.";
+          levelText.classList.add("warning");
+        });
+
+        track.addEventListener("unmute", () => {
+          monitorStartedAt = Date.now();
+          lastInputSignalAt = 0;
+          levelText.textContent = "입력 신호 다시 확인 중...";
+          levelText.classList.remove("warning");
+        });
+
         track.addEventListener(
           "ended",
           () => {
@@ -467,7 +549,15 @@ async function startMicrophoneMonitor() {
             stopMicrophoneMonitor();
 
             if (shouldListen && !document.hidden) {
-              window.setTimeout(startMicrophoneMonitor, 700);
+              window.setTimeout(() => {
+                if (
+                  shouldListen &&
+                  !document.hidden &&
+                  !deviceChangeInProgress
+                ) {
+                  startMicrophoneMonitor();
+                }
+              }, 700);
             }
           },
           { once: true },
@@ -501,17 +591,60 @@ async function startMicrophoneMonitor() {
   return microphoneMonitorPromise;
 }
 
-async function handleDeviceChange() {
-  await refreshMicrophoneDevices();
+function handleDeviceChange() {
+  clearDeviceChangeTimer();
+  const generation = ++deviceChangeGeneration;
 
-  if (shouldListen && !document.hidden) {
-    microphoneMonitorDisabled = false;
-    stopMicrophoneMonitor();
-    window.setTimeout(startMicrophoneMonitor, 400);
+  if (!shouldListen || document.hidden) {
+    deviceChangeTimer = window.setTimeout(() => {
+      deviceChangeTimer = null;
+
+      if (generation === deviceChangeGeneration) {
+        refreshMicrophoneDevices();
+      }
+    }, DEVICE_CHANGE_SETTLE_DELAY);
+    return;
   }
+
+  deviceChangeInProgress = true;
+  microphoneMonitorDisabled = false;
+  activeInputDetails = "";
+  clearRestartTimer();
+  stopMicrophoneMonitor();
+  setStatus("입력 전환 중", "reconnecting");
+  restartInfo.textContent = "마이크 변경 감지 · 새 입력을 확인하는 중";
+  caption.classList.remove("interim");
+
+  if (recognitionActive || recognitionStarting) {
+    abortedForDeviceChange = true;
+    recognition.abort();
+    recognitionActive = false;
+    recognitionStarting = false;
+  }
+
+  deviceChangeTimer = window.setTimeout(async () => {
+    deviceChangeTimer = null;
+
+    if (generation !== deviceChangeGeneration) {
+      return;
+    }
+
+    await refreshMicrophoneDevices();
+    await startMicrophoneMonitor();
+
+    if (generation !== deviceChangeGeneration) {
+      return;
+    }
+
+    deviceChangeInProgress = false;
+
+    if (shouldListen && !document.hidden) {
+      scheduleRestart("마이크 변경", 400);
+    }
+  }, DEVICE_CHANGE_SETTLE_DELAY);
 }
 
-function startSession() {
+async function startSession() {
   if (shouldListen) {
     return;
   }
@@ -522,13 +655,19 @@ function startSession() {
   totalRestarts = 0;
   lastRecognitionError = null;
   microphoneMonitorDisabled = false;
+  deviceChangeInProgress = false;
+  abortedForDeviceChange = false;
+  deviceChangeGeneration += 1;
+  clearDeviceChangeTimer();
   updateRestartCount();
   lastErrorLabel.textContent = "없음";
   setControls(true);
   caption.textContent = "듣고 있습니다...";
   caption.classList.add("interim");
+  setStatus("입력 확인 중", "reconnecting");
+  restartInfo.textContent = "기본 마이크 입력을 확인하는 중";
+  await startMicrophoneMonitor();
   startRecognition();
-  startMicrophoneMonitor();
 }
 
 function stopSession() {
@@ -539,7 +678,11 @@ function stopSession() {
   shouldListen = false;
   userStopped = true;
   lastRecognitionError = null;
+  deviceChangeInProgress = false;
+  abortedForDeviceChange = false;
+  deviceChangeGeneration += 1;
   clearRestartTimer();
+  clearDeviceChangeTimer();
   setStatus("중지됨");
   setControls(false);
   restartInfo.textContent = "사용자가 중지함";
@@ -551,13 +694,16 @@ function stopSession() {
   }
 }
 
-function handleVisibilityChange() {
+async function handleVisibilityChange() {
   if (!shouldListen) {
     return;
   }
 
   if (document.hidden) {
     clearRestartTimer();
+    clearDeviceChangeTimer();
+    deviceChangeInProgress = false;
+    deviceChangeGeneration += 1;
     setStatus("화면 복귀 대기", "reconnecting");
     restartInfo.textContent = "화면이 다시 표시되면 자동으로 재연결합니다.";
     stopMicrophoneMonitor();
@@ -572,7 +718,7 @@ function handleVisibilityChange() {
     return;
   }
 
-  startMicrophoneMonitor();
+  await startMicrophoneMonitor();
 
   if (!recognitionActive && !recognitionStarting) {
     scheduleRestart("화면 복귀", 400);
