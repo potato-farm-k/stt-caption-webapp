@@ -249,23 +249,6 @@ h2 {
   color: var(--muted);
 }
 
-.deployment-info {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  margin: 0;
-  color: #888888;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.deployment-info span {
-  color: var(--accent);
-  font-size: 12px;
-}
-
 @media (max-width: 720px) {
   .app {
     padding: 8px 20px 20px;
@@ -282,10 +265,6 @@ h2 {
 
   .eyebrow {
     font-size: 12px;
-  }
-
-  .deployment-info {
-    font-size: 10px;
   }
 
   h1 {
